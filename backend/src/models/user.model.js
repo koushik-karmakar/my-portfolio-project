@@ -1,0 +1,104 @@
+import mongoose from "mongoose";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
+const userSchema = new mongoose.Schema(
+  {
+    username: {
+      type: String,
+      required: true,
+      trim: true,
+      unique: true,
+      lowercase: true,
+      index: true, // for search
+    },
+
+    email: {
+      type: String,
+      required: true,
+      trim: true,
+      unique: true,
+      lowercase: true,
+    },
+    number: {
+      type: Number,
+    },
+    fullname: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true, // for search
+    },
+
+    avatar: {
+      type: String, //cloudinary url
+      required: true,
+    },
+
+    coverImage: {
+      type: String, //cloudinary url
+    },
+
+    watchHistory: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Video",
+      },
+    ],
+
+    password: {
+      type: String, //hashed
+    },
+
+    refreshToken: {
+      type: String,
+    },
+
+    isOnline: {
+      type: Boolean,
+      default: false,
+    },
+    lastSeen: Date,
+
+    googleAuth: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+
+userSchema.pre("save", async function () {
+  if (!this.isModified("password") || !this.password) return;
+  this.password = await bcrypt.hash(this.password, 10);
+});
+userSchema.methods.isPasswordCorrect = async function (password) {
+  return await bcrypt.compare(password, this.password);
+};
+
+userSchema.methods.generateAccessToken = function () {
+  return jwt.sign(
+    {
+      _id: this._id,
+      email: this.email,
+      fullname: this.fullname,
+      username: this.username,
+    },
+    process.env.ACCESS_TOKEN_SECRET,
+    {
+      expiresIn: process.env.ACCESS_TOKEN_EXPIRY,
+    }
+  );
+};
+
+userSchema.methods.generateRefreshToken = function () {
+  return jwt.sign(
+    {
+      _id: this._id,
+    },
+    process.env.REFRESH_TOKEN_SECRET,
+    {
+      expiresIn: process.env.REFRESH_TOKEN_EXPIRY,
+    }
+  );
+};
+
+userSchema.methods.updateImageOnCloudinary = function (newImageUrl) {};
+
+export const User = mongoose.model("User", userSchema);
