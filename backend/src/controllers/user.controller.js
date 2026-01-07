@@ -607,6 +607,7 @@ const checkNumberExists = asyncHandler(async (req, res) => {
 const searchNewUser = asyncHandler(async (req, res) => {
   try {
     const { q } = req.query;
+    const userId = req.user._id;
 
     if (!q || q.trim().length < 2) {
       return res.json([]);
@@ -619,16 +620,18 @@ const searchNewUser = asyncHandler(async (req, res) => {
     if (isNumber) {
       query = {
         number: { $regex: q },
+        _id: { $ne: userId },
       };
     } else {
       query = {
         username: { $regex: q, $options: "i" },
         number: { $exists: true, $ne: null },
+        _id: { $ne: userId },
       };
     }
 
     const users = await User.find(query)
-      .select("_id username fullname number avatar")
+      .select("_id username fullname number avatar isOnline lastSeen email")
       .limit(10);
 
     res.json(users);

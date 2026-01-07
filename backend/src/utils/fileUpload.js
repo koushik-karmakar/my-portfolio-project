@@ -1,17 +1,15 @@
 import { v2 as cloudinary } from "cloudinary";
-import { existsSync, unlinkSync } from "fs";
+import fs from "fs";
 import { ApiErrorHandle } from "./ApiErrorHandle.js";
-import { ApiResponse } from "./ApiResponse.js";
+// cloudinary.config({
+//   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+//   api_key: process.env.CLOUDINARY_API_KEY,
+//   api_secret: process.env.CLOUDINARY_API_SECRET,
+// });
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+  cloud_name: "db7qmdfr2",
+  api_key: "723248213726281",
+  api_secret: "vcFR0cRfyiGf-GqlBJ4A7mtxGKU",
 });
 
 const uploadOnCloudinary = async (localFilePath) => {
@@ -19,39 +17,58 @@ const uploadOnCloudinary = async (localFilePath) => {
     if (!localFilePath) {
       throw new ApiErrorHandle(400, "No file path provided");
     }
-    const response = await cloudinary.uploader.upload(localFilePath);
-    if (existsSync(localFilePath)) {
-      unlinkSync(localFilePath);
+
+    if (!fs.existsSync(localFilePath)) {
+      throw new ApiErrorHandle(400, `File not found at path: ${localFilePath}`);
     }
+
+    const response = await cloudinary.uploader.upload(localFilePath, {
+      resource_type: "auto",
+    });
+
+    fs.unlinkSync(localFilePath);
+
     return response;
   } catch (error) {
-    if (localFilePath && existsSync(localFilePath)) {
-      unlinkSync(localFilePath);
+    if (localFilePath && fs.existsSync(localFilePath)) {
+      fs.unlinkSync(localFilePath);
     }
-    throw new ApiErrorHandle(500, "Cloudinary Upload Error: " + error.message);
+
+    throw new ApiErrorHandle(
+      error.statusCode || 500,
+      "Cloudinary Upload Error: " + error.message
+    );
   }
 };
 
-const updateImageOnCloudinary = async (OldImageUrl, newImageURL) => {
+const updateImageOnCloudinary = async (oldImageUrl, newImagePath) => {
   try {
-    if (!newImageURL || !OldImageUrl) {
-      throw new ApiErrorHandle(400, "Image path not found.");
+    if (!oldImageUrl || !newImagePath) {
+      throw new ApiErrorHandle(400, "Image path not found");
     }
 
-    const publicId = OldImageUrl.split("/").pop().split(".")[0];
-    const uploadImage = await cloudinary.uploader.upload(newImageURL, {
+    if (!fs.existsSync(newImagePath)) {
+      throw new ApiErrorHandle(400, "New image file not found on server");
+    }
+
+    const publicId = oldImageUrl.split("/").pop().split(".")[0];
+
+    const response = await cloudinary.uploader.upload(newImagePath, {
       public_id: publicId,
       overwrite: true,
       invalidate: true,
+      resource_type: "auto",
     });
 
-    if (existsSync(newImageURL)) {
-      unlinkSync(newImageURL);
-    }
+    fs.unlinkSync(newImagePath);
 
-    return uploadImage.url;
+    return response.secure_url;
   } catch (error) {
-    throw new ApiErrorHandle(500, "Cloudinary Upload Error: " + error.message);
+    throw new ApiErrorHandle(
+      error.statusCode || 500,
+      "Cloudinary Upload Error: " + error.message
+    );
   }
 };
+
 export { uploadOnCloudinary, updateImageOnCloudinary };

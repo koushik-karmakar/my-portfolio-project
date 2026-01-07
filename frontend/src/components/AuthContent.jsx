@@ -76,7 +76,7 @@ function AuthContent() {
                 referrerPolicy="no-referrer"
                 src={
                   user?.avatar ||
-                  "https://api.dicebear.com/7.x/avataaars/svg?seed=user"
+                  "https://res.cloudinary.com/db7qmdfr2/image/upload/v1767720537/user-avatar-male-5_dbn4iq.png"
                 }
                 alt={user?.username}
                 className="w-10 h-10 rounded-full border-2 border-purple-500/30"
@@ -85,11 +85,10 @@ function AuthContent() {
             </div>
             <div className="text-white">
               <p className="font-semibold text-sm">
-                {user?.fullname?.includes(" ")
-                  ? user.fullname.split(" ")[0]
-                  : user?.fullname}
+                {user?.safeUser.fullname?.includes(" ")
+                  ? user.safeUser.fullname.split(" ")[0]
+                  : user?.safeUser.fullname}
               </p>
-              {/* <p className="text-xs text-gray-400">Administrator</p> */}
             </div>
           </div>
 

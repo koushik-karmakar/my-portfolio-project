@@ -43,8 +43,9 @@ export default function Login() {
         },
         { withCredentials: true }
       );
-
       AlertBox("success", response.data.message, response.status);
+      const user = response.data.data;
+      localStorage.setItem("user", JSON.stringify(user));
       navigate("/");
     } catch (error) {
       AlertBox(

@@ -1,11 +1,10 @@
 import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import path from "path";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 const app = express();
-const __dirname = path.resolve();
-
 /* ===================== CORS ===================== */
 app.use(
   cors({
@@ -15,27 +14,31 @@ app.use(
 );
 
 /* ===================== MIDDLEWARE ===================== */
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "10kb" }));
+app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 app.use(cookieParser());
 
 /* ===================== API ROUTES ===================== */
 import { router } from "./routes/user.routes.js";
+
 import { googleRouter } from "./routes/google.routes.js";
 import { todoRouter } from "./routes/todo.routes.js";
 
-app.use("/api/users", router);
 app.use("/api/users/google-login", googleRouter);
 app.use("/api/p1", todoRouter);
+app.use("/api/users", router);
 
 /* ===================== FRONTEND ===================== */
-app.use(express.static(path.join(__dirname, "../frontend/dist")));
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/*  EXPRESS SPA FALLBACK */
-app.get(/.*/, (req, res) => {
-  res.sendFile(path.join(__dirname, "../frontend/dist/index.html"));
-});
+if (process.env.NODE_ENV === "production") {
+  const buildPath = join(__dirname, "..", "client", "dist");
+  app.use(express.static(buildPath));
 
+  app.get("*", (req, res) => {
+    res.sendFile(join(buildPath, "index.html"));
+  });
+}
 /* ===================== ERROR HANDLER ===================== */
 app.use((err, req, res, next) => {
   console.error(err);

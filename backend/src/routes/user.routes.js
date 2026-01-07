@@ -18,6 +18,13 @@ import {
   send_mail_otp,
   searchNewUser,
 } from "../controllers/user.controller.js";
+
+import {
+  createNewChat,
+  getUserChats,
+  getChatMessages,
+} from "../controllers/chat.controller.js";
+
 const router = Router();
 import { upload } from "../middlewares/multer.middleware.js";
 import { verifyJWT } from "../middlewares/auth.middlewares.js";
@@ -39,13 +46,18 @@ router.route("/refresh-token").post(refreshAccessToken);
 router.route("/change-password").post(verifyJWT, changeCurrentPassword);
 router.route("/current-user").get(verifyJWT, getCurrentUser);
 
-// for chat app
+// For Chat App - User Management
 router.route("/user-number").post(verifyJWT, getNumber);
 router.route("/user-number-check").post(verifyJWT, checkNumberExists);
 router.route("/send-mail-otp").post(verifyJWT, send_mail_otp);
 router.route("/verify-mail-otp").post(verifyJWT, verify_mail_otp);
 router.route("/update-user/details").patch(verifyJWT, updateUserDetails);
-router.route("/search").get(searchNewUser);
+
+// ===================== CHAT ROUTES =====================
+router.route("/chats").get(verifyJWT, getUserChats);
+router.route("/chats/create").post(verifyJWT, createNewChat);
+router.route("/chats/:chatId/messages").get(verifyJWT, getChatMessages);
+router.route("/search").get(verifyJWT, searchNewUser);
 router
   .route("/update-user/avatar")
   .patch(verifyJWT, upload.single("avatar"), updateAvater);
@@ -54,4 +66,5 @@ router
   .patch(verifyJWT, upload.single("coverImage"), updateCoverImage);
 router.route("/channel/:username").get(verifyJWT, getUserChannelProfile);
 router.route("/watch-history").get(verifyJWT, getUserWatchHistory);
+
 export { router };

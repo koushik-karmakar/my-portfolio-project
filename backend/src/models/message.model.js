@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+
 const messageSchema = new mongoose.Schema(
   {
     chatId: {
@@ -11,18 +12,29 @@ const messageSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    reciverId: {
+    receiverId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
-    content: {
+    messageType: {
       type: String,
-      enum: ["text", "image", "file"],
+      enum: ["text", "image", "file", "system"],
       default: "text",
     },
+    text: String,
+    readBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   {
     timestamps: true,
   }
 );
-export default Message = mongoose.model("message", messageSchema);
+
+messageSchema.index({ chatId: 1, createdAt: -1 });
+messageSchema.index({ senderId: 1, chatId: 1 });
+
+export const Message = mongoose.model("message", messageSchema);

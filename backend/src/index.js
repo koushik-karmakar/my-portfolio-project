@@ -3,7 +3,7 @@ dotenv.config({ path: "./.env" });
 import { app } from "./app.js";
 import http from "http";
 import { connectionDB } from "./database/db.js";
-
+import { socketConnect } from "./socket.js";
 const server = http.createServer(app);
 // this async function return a Promise so that we can work with it and handle it properly
 connectionDB()
@@ -12,8 +12,11 @@ connectionDB()
       console.log("Express Error:" + error);
       throw error;
     });
-    server.listen(process.env.PORT, () => {
-      console.log(`Server is running on port: ${process.env.PORT}`);
+
+    socketConnect(server, process.env.CORS_ORIGIN);
+    const PORT = process.env.PORT || 8000;
+    server.listen(PORT, () => {
+      console.log(`Server running on port: ${PORT}`);
     });
   })
   .catch((err) => {
