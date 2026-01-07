@@ -85,9 +85,9 @@ function AuthContent() {
             </div>
             <div className="text-white">
               <p className="font-semibold text-sm">
-                {user?.safeUser.fullname?.includes(" ")
-                  ? user.safeUser.fullname.split(" ")[0]
-                  : user?.safeUser.fullname}
+                {user?.fullname?.includes(" ")
+                  ? user.fullname.split(" ")[0]
+                  : user?.fullname}
               </p>
             </div>
           </div>
