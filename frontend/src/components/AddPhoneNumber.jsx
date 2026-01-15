@@ -26,7 +26,7 @@ function AddPhoneNumber() {
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [timer]);
+  }, []);
 
   const formatTimer = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -145,7 +145,7 @@ function AddPhoneNumber() {
   return (
     <div className="min-h-screen bg-linear-to-br from-gray-50 to-blue-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-        {/* Header */}
+    
         <div className="bg-linear-to-r from-blue-600 to-indigo-600 p-6 text-white">
           <h1 className="text-2xl font-bold">
             {step === 1 ? "Add Phone Number" : "Verify OTP"}

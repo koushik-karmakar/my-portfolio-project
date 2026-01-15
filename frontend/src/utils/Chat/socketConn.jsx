@@ -1,13 +1,19 @@
 import { io } from "socket.io-client";
 
-let socket;
+// /let socket;/
 
+// export const getSocket = (url) => {
+//   if (!socket) {
+//     socket = io(url, {
+//       withCredentials: true,
+//       autoConnect: false,
+//     });
+//   }
+//   return socket;
+// };
 export const getSocket = (url) => {
-  if (!socket) {
-    socket = io(url, {
-      withCredentials: true,
-      autoConnect: false,
-    });
-  }
-  return socket;
+  return io(url, {
+    withCredentials: true,
+    autoConnect: true,
+  });
 };

@@ -1,4 +1,5 @@
 import { Server } from "socket.io";
+import mongoose from "mongoose";
 import { Message } from "./models/message.model.js";
 import { User } from "./models/user.model.js";
 import { Chat } from "./models/chat.model.js";
@@ -13,74 +14,67 @@ export function socketConnect(server, fr_url) {
 
   const onlineUsers = new Map();
 
+  const socketToUser = new Map();
+
   io.on("connection", (socket) => {
     console.log("User connected:", socket.id);
-
     socket.on("user_online", async (userId) => {
-      onlineUsers.set(userId, socket.id);
-      console.log(`User ${userId} is online (socket: ${socket.id})`);
+      if (!mongoose.Types.ObjectId.isValid(userId)) return;
 
-      try {
-        await User.findByIdAndUpdate(userId, {
-          isOnline: true,
-          lastSeen: null,
-        });
-
-        const userChats = await Chat.find({
-          members: { $in: [userId] },
-          isGroup: false,
-        });
-
-        userChats.forEach((chat) => {
-          const otherUserId = chat.members.find(
-            (memberId) => memberId.toString() !== userId.toString()
-          );
-
-          if (otherUserId) {
-            const otherUserSocketId = onlineUsers.get(otherUserId.toString());
-            if (otherUserSocketId) {
-              io.to(otherUserSocketId).emit("user_status_change", {
-                userId: userId,
-                isOnline: true,
-                lastSeen: null,
-              });
-            }
-          }
-        });
-      } catch (error) {
-        console.error("Error updating online status:", error);
+      // Store socket id for this user
+      if (!socketToUser.has(socket.id)) {
+        socketToUser.set(socket.id, userId);
       }
+
+      // Update user status
+      await User.findByIdAndUpdate(userId, {
+        isOnline: true,
+        lastSeen: null,
+      });
+
+      // Notify contacts
+      notifyUserStatus(io, userId, true, null, socketToUser);
     });
 
+    // ================= JOIN CHAT =================
     socket.on("join_chat", (chatId) => {
+      if (!mongoose.Types.ObjectId.isValid(chatId)) return;
       socket.join(chatId);
-      console.log(`Socket ${socket.id} joined chat ${chatId}`);
     });
 
+    // ================= SEND MESSAGE =================
     socket.on("send_message", async (data) => {
-      const { chatId, senderId, receiverId, text, tempId } = data;
-      console.log("Received message:", data);
-
       try {
-        const chat = await Chat.findOne({
-          _id: chatId,
-          members: { $in: [senderId] },
-        });
-
-        if (!chat) {
+        const { senderId, receiverId, text } = data;
+        console.log("SEND_MESSAGE:", data);
+        if (
+          !mongoose.Types.ObjectId.isValid(senderId) ||
+          !mongoose.Types.ObjectId.isValid(receiverId) ||
+          !text?.trim()
+        ) {
           socket.emit("message_error", {
-            error: "Chat not found or unauthorized",
-            tempId,
+            error: "Invalid data",
           });
           return;
         }
+        let chat = await Chat.findOne({
+          isGroup: false,
+          members: { $all: [senderId, receiverId] },
+        });
 
+        if (!chat) {
+          chat = await Chat.create({
+            members: [senderId, receiverId],
+          });
+        }
+        const chatId = chat._id.toString();
+        socket.join(chatId);
         const message = await Message.create({
           chatId,
           senderId,
           receiverId,
-          text,
           messageType: "text",
+          text: text.trim(),
           readBy: [senderId],
         });
 
@@ -89,40 +83,21 @@ export function socketConnect(server, fr_url) {
           updatedAt: new Date(),
         });
 
-        const populatedMessage = await Message.findById(message._id)
-          .populate("senderId", "username fullname avatar")
-          .populate("receiverId", "username fullname");
+        const payload = await Message.findById(message._id);
 
-        const messageData = populatedMessage.toObject();
-
-        const enhancedMessage = {
-          ...messageData,
-          id: messageData._id,
-          tempId,
-        };
-
-        io.to(chatId).emit("receive_message", enhancedMessage);
-
-        const receiverSocketId = onlineUsers.get(receiverId);
-        if (receiverSocketId) {
-          io.to(receiverSocketId).emit("new_message_notification", {
-            chatId,
-            message: text,
-            senderId,
-            messageId: message._id,
-          });
-        }
-
-        console.log(`Message sent in chat ${chatId}: ${text}`);
-      } catch (error) {
-        console.error("Error saving message:", error);
+        console.log("payload", payload.toObject());
+        io.to(chatId).emit("receive_message", {
+          ...payload.toObject(),
+        });
+      } catch (err) {
+        console.error("send_message error:", err);
         socket.emit("message_error", {
           error: "Failed to send message",
-          tempId,
         });
       }
     });
 
+    // ================= TYPING =================
     socket.on("typing", ({ chatId, userId }) => {
       socket.to(chatId).emit("user_typing", { userId });
     });
@@ -131,86 +106,72 @@ export function socketConnect(server, fr_url) {
       socket.to(chatId).emit("user_stop_typing", { userId });
     });
 
+    // ================= READ =================
     socket.on("mark_as_read", async ({ messageId, userId }) => {
-      try {
-        const message = await Message.findById(messageId);
+      if (
+        !mongoose.Types.ObjectId.isValid(messageId) ||
+        !mongoose.Types.ObjectId.isValid(userId)
+      )
+        return;
 
-        if (!message) {
-          console.error("Message not found:", messageId);
-          return;
-        }
+      await Message.findByIdAndUpdate(messageId, {
+        $addToSet: { readBy: userId },
+      });
 
-        const chat = await Chat.findOne({
-          _id: message.chatId,
-          members: { $in: [userId] },
-        });
-
-        if (!chat) {
-          console.error("User not authorized to mark message as read");
-          return;
-        }
-
-        await Message.findByIdAndUpdate(messageId, {
-          $addToSet: { readBy: userId },
-        });
-
-        io.to(message.chatId.toString()).emit("message_read", {
+      const msg = await Message.findById(messageId);
+      if (msg) {
+        io.to(msg.chatId.toString()).emit("message_read", {
           messageId,
           userId,
         });
-      } catch (error) {
-        console.error("Error marking as read:", error);
       }
     });
 
     socket.on("disconnect", async () => {
-      console.log("User disconnected:", socket.id);
-
-      let disconnectedUserId = null;
-      for (let [userId, socketId] of onlineUsers) {
-        if (socketId === socket.id) {
-          disconnectedUserId = userId;
-          onlineUsers.delete(userId);
-          break;
-        }
+      const userId = socketToUser.get(socket.id);
+      console.log(userId);
+      const del = socketToUser.delete(socket.id);
+      console.log("second TimeRanges", socketToUser, del);
+      if (del) {
+        const lastSeen = new Date();
+        await User.findByIdAndUpdate(userId, {
+          isOnline: false,
+          lastSeen,
+        });
       }
+    });
+  });
+}
 
-      if (disconnectedUserId) {
-        try {
-          const lastSeen = new Date();
-          await User.findByIdAndUpdate(disconnectedUserId, {
-            isOnline: false,
-            lastSeen: lastSeen,
+// send sms to every online user except the user
+function notifyUserStatus(io, userId, isOnline, lastSeen, socketToUser) {
+  Chat.find({ members: userId, isGroup: false }).then((chats) => {
+    chats.forEach((chat) => {
+      const otherId = chat.members.find(
+        (id) => id.toString() !== userId.toString()
+      );
+      if (socketToUser.has(otherId)) {
+        socketToUser.get(otherId).forEach((sid) => {
+          io.to(sid).emit("user_status_change", {
+            userId,
+            isOnline,
+            lastSeen,
           });
-
-          console.log(`User ${disconnectedUserId} went offline at ${lastSeen}`);
-
-          const userChats = await Chat.find({
-            members: { $in: [disconnectedUserId] },
-            isGroup: false,
-          });
-
-          userChats.forEach((chat) => {
-            const otherUserId = chat.members.find(
-              (memberId) =>
-                memberId.toString() !== disconnectedUserId.toString()
-            );
-
-            if (otherUserId) {
-              const otherUserSocketId = onlineUsers.get(otherUserId.toString());
-              if (otherUserSocketId) {
-                io.to(otherUserSocketId).emit("user_status_change", {
-                  userId: disconnectedUserId,
-                  isOnline: false,
-                  lastSeen: lastSeen,
-                });
-              }
-            }
-          });
-        } catch (error) {
-          console.error("Error updating offline status:", error);
-        }
+        });
       }
+    });
+  });
+}
+
+function notifyReceiver(io, receiverId, payload, onlineUsers) {
+  if (!onlineUsers.has(receiverId.toString())) return;
+
+  onlineUsers.get(receiverId.toString()).forEach((sid) => {
+    io.to(sid).emit("new_message_notification", {
+      chatId: payload.chatId,
+      message: payload.text,
+      senderId: payload.senderId._id,
+      messageId: payload._id,
     });
   });
 }

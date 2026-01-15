@@ -464,7 +464,7 @@ const getNumber = asyncHandler(async (req, res) => {
     throw new ApiErrorHandle(401, "Unauthorized");
   }
 
-  const user = await User.findById(req.user._id).select("+number");
+  const user = await User.findOne({ email }).select("+number");
 
   if (!user) {
     throw new ApiErrorHandle(404, "User not found");
@@ -615,27 +615,37 @@ const searchNewUser = asyncHandler(async (req, res) => {
 
     const isNumber = /^\d+$/.test(q);
 
-    let query = {};
+    let query = { _id: { $ne: userId } };
 
     if (isNumber) {
-      query = {
-        number: { $regex: q },
-        _id: { $ne: userId },
-      };
+      query.number = { $regex: q, $options: "i" };
     } else {
-      query = {
-        username: { $regex: q, $options: "i" },
-        number: { $exists: true, $ne: null },
-        _id: { $ne: userId },
-      };
+      query.$or = [
+        { username: { $regex: q, $options: "i" } },
+        { fullname: { $regex: q, $options: "i" } },
+        { email: { $regex: q, $options: "i" } },
+      ];
     }
 
     const users = await User.find(query)
       .select("_id username fullname number avatar isOnline lastSeen email")
-      .limit(10);
+      .limit(10)
+      .lean();
 
-    res.json(users);
+    const formattedUsers = users.map((user) => ({
+      _id: user._id,
+      username: user.username,
+      fullname: user.fullname,
+      number: user.number,
+      avatar: user.avatar,
+      isOnline: user.isOnline || false,
+      lastSeen: user.lastSeen || null,
+      email: user.email,
+    }));
+
+    res.json(formattedUsers);
   } catch (error) {
+    console.error("Error searching users:", error);
     res.status(500).json({
       message: "Error searching new user",
       error: error.message,

@@ -243,3 +243,15 @@ textarea {
   scrollbar-width: none;
 
 }
+
+
+textarea {
+  scrollbar-width: none;
+
+  -ms-overflow-style: none;
+}
+
+textarea::-webkit-scrollbar {
+  display: none;
+
+}
