@@ -23,6 +23,12 @@ export default function WhisperChatApp() {
     (user) => user._id !== currentUserId
   );
 
+  useEffect(() => {
+    if (!searchedUser) {
+      console.log(filteredUsers);
+    }
+  }, [setSearchedUser, searchedUser]);
+
   const searchUsers = async (query) => {
     try {
       const res = await axios.get(
@@ -30,7 +36,7 @@ export default function WhisperChatApp() {
         { params: { q: query }, withCredentials: true }
       );
       setSearchedUser(res.data);
-      console.log(res.data);
+      // console.log(res.data);
     } catch (error) {
       console.error("Get user data error:", error);
       return [];
@@ -49,8 +55,10 @@ export default function WhisperChatApp() {
             withCredentials: true,
           }
         );
-        setUsers(res.data);
-        console.log(res.data[0]);
+        if (res.data) {
+          setUsers(res.data);
+        }
+        console.log("No user found.");
       } catch (error) {
         console.error("Search user error:", error);
         return [];
@@ -110,7 +118,7 @@ export default function WhisperChatApp() {
       if (!getUser) return;
       const user = JSON.parse(getUser);
       socket.emit("user_online", user._id);
-      console.log(user._id);
+      // console.log(user._id);
     };
     // const onReceiveMessage = (payload) => {
     //   console.log("Received message:", payload.toString());
@@ -133,9 +141,10 @@ export default function WhisperChatApp() {
     //     console.log("new sms", sms);
     //   }
     // };
-    const onReceiveMessage = (payload) => {
+    const onReceiveMessage = async (payload) => {
+      const chatId = payload.chatId;
       console.log("Received message:", payload);
-
+      const exists = users.find((u) => u.chatId?.toString() === chatId);
       updateLastMessage(
         payload.chatId,
         payload.text,
@@ -167,6 +176,31 @@ export default function WhisperChatApp() {
               user.chatId === payload.chatId ? { ...user, unread: 0 } : user
             )
           );
+        }
+      }
+
+      if (!exists) {
+        const res = await axios.get(
+          `${
+            import.meta.env.VITE_BACKEND_PORT_LINK
+          }/api/users/get-chat-details`,
+          {
+            params: { chatId },
+            withCredentials: true,
+          }
+        );
+
+        if (res.data?.otherUser) {
+          setUsers((prev) => [
+            {
+              ...res.data.otherUser,
+              chatId,
+              lastMessage: payload.text,
+              lastMessageAt: payload.createdAt,
+              unread: 1,
+            },
+            ...prev,
+          ]);
         }
       }
     };
@@ -217,39 +251,8 @@ export default function WhisperChatApp() {
         return user;
       })
     );
-
-    const existingUser = users.find((user) => user.chatId === chatId);
-    if (!existingUser) {
-      try {
-        const res = await axios.get(
-          `${
-            import.meta.env.VITE_BACKEND_PORT_LINK
-          }/api/users/get-chat-details`,
-          {
-            params: { chatId },
-            withCredentials: true,
-          }
-        );
-
-        if (res.data && res.data.otherUser) {
-          const isMyMessage = senderId === currentUserId;
-
-          setUsers((prev) => [
-            {
-              ...res.data.otherUser,
-              chatId,
-              lastMessage: text,
-              lastMessageAt: time,
-              unread: isMyMessage ? 0 : 1,
-            },
-            ...prev,
-          ]);
-        }
-      } catch (error) {
-        console.error("Failed to fetch chat details:", error);
-      }
-    }
   };
+
   const handleOpenModal = () => {
     setIsNewChatModalOpen(true);
     setSearchQuery("");
@@ -281,10 +284,32 @@ export default function WhisperChatApp() {
     return () => window.removeEventListener("resize", checkScreenSize);
   }, []);
 
+  // const handleSendMessage = () => {
+  //   if (!newMessage.trim() || !selectedUser) return;
+
+  //   const newMsg = {
+  //     text: newMessage.trim(),
+  //     senderId: currentUser._id,
+  //     receiverId: selectedUser._id,
+  //     createdAt: new Date(),
+  //   };
+
+  //   updateLastMessage(
+  //     selectedUser.chatId,
+  //     newMessage.trim(),
+  //     new Date(),
+  //     currentUser._id
+  //   );
+
+  //   socketRef.current.emit("send_message", newMsg);
+  //   setNewMessage("");
+  // };
+
   const handleSendMessage = () => {
     if (!newMessage.trim() || !selectedUser) return;
 
     const newMsg = {
+      chatId: selectedUser.chatId,
       text: newMessage.trim(),
       senderId: currentUser._id,
       receiverId: selectedUser._id,
@@ -297,7 +322,6 @@ export default function WhisperChatApp() {
       new Date(),
       currentUser._id
     );
-
     socketRef.current.emit("send_message", newMsg);
     setNewMessage("");
   };
@@ -332,8 +356,30 @@ export default function WhisperChatApp() {
     }
   };
 
+  const createOrGetUser = async (user) => {
+    try {
+      const res = await axios.post(
+        `${import.meta.env.VITE_BACKEND_PORT_LINK}/api/users/create-or-get`,
+        { receiverId: user._id },
+        { withCredentials: true }
+      );
+      setSelectedUser({
+        ...user,
+        chatId: res.data._id,
+      });
+      setUsers((prevUsers) =>
+        prevUsers.map((u) =>
+          u._id === user._id ? { ...u, chatId: res.data._id } : u
+        )
+      );
+    } catch (error) {
+      console.error("Get user data error:", error);
+    }
+  };
+
   const handleNewUserChat = (user) => {
     setSelectedUser(user);
+    console.log(user);
     setMessages([]);
     setUsers((prev) => {
       if (prev.some((u) => u._id === user._id)) {
@@ -341,13 +387,13 @@ export default function WhisperChatApp() {
       }
       return [user, ...prev];
     });
+    createOrGetUser(user);
   };
 
   const handleSelectUser = async (user) => {
+    console.log(user);
     setMessages([]);
     setSelectedUser(user);
-
-    // Reset unread count for this user
     setUsers((prevUsers) =>
       prevUsers.map((u) => (u._id === user._id ? { ...u, unread: 0 } : u))
     );
@@ -374,7 +420,7 @@ export default function WhisperChatApp() {
   };
 
   return (
-    <div className="min-h-screen bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col md:flex-row h-[calc(100vh-180px)] md:h-[calc(100vh-200px)]">
+    <div className="min-h-screen bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col md:flex-row h-[calc(100vh-180px)] md:h-[calc(100vh-200px)] max-h-screen">
       {/* modal section start  */}
       {isNewChatModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -659,14 +705,14 @@ export default function WhisperChatApp() {
 
       {/* chat section-right side */}
       <div
-        className={`flex-1 flex flex-col ${
+        className={`flex-1 flex flex-col min-h-0 ${
           isMobile && !selectedUser ? "hidden" : "flex"
         }`}
       >
         {selectedUser ? (
           <>
             {/* navbar */}
-            <div className="p-4 md:p-6 border-b border-gray-200 bg-white">
+            <div className="shrink-0 p-4 md:p-6 border-b border-gray-200 bg-white">
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   {isMobile && (
@@ -765,59 +811,66 @@ export default function WhisperChatApp() {
               </div>
             </div>
 
-            {/* message section  */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-gray-50">
-              <div className="space-y-4">
-                {messages && messages.length > 0 ? (
-                  messages.map((message) => (
-                    <div
-                      className={`flex ${
-                        message.senderId === currentUserId
-                          ? "justify-end"
-                          : "justify-start"
-                      }`}
-                    >
+            <div className="flex-1 overflow-hidden min-h-0 relative">
+              <div
+                className="absolute inset-0 overflow-y-auto"
+                style={{
+                  WebkitOverflowScrolling: "touch",
+                }}
+              >
+                <div className="p-4 md:p-6 space-y-4 pb-20">
+                  {messages && messages.length > 0 ? (
+                    messages.map((message) => (
                       <div
-                        className={`max-w-[70%] md:max-w-[60%] rounded-2xl px-4 py-3 ${
+                        key={message._id}
+                        className={`flex ${
                           message.senderId === currentUserId
-                            ? "bg-blue-500 text-white rounded-br-none"
-                            : "bg-white text-gray-800 rounded-bl-none border border-gray-200"
+                            ? "justify-end"
+                            : "justify-start"
                         }`}
                       >
-                        <p className="whitespace-pre-wrap wrap-break-word">
-                          {message.text}
-                        </p>
                         <div
-                          className={`text-xs mt-1 ${
+                          className={`max-w-[70%] md:max-w-[60%] rounded-2xl px-4 py-3 ${
                             message.senderId === currentUserId
-                              ? "text-blue-100"
-                              : "text-gray-500"
-                          } text-right`}
+                              ? "bg-blue-500 text-white rounded-br-none"
+                              : "bg-white text-gray-800 rounded-bl-none border border-gray-200"
+                          }`}
                         >
-                          {message.createdAt
-                            ? new Date(message.createdAt).toLocaleTimeString(
-                                [],
-                                {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                }
-                              )
-                            : ""}
+                          <p className="whitespace-pre-wrap wrap-break-word">
+                            {message.text}
+                          </p>
+                          <div
+                            className={`text-xs mt-1 ${
+                              message.senderId === currentUserId
+                                ? "text-blue-100"
+                                : "text-gray-500"
+                            } text-right`}
+                          >
+                            {message.createdAt
+                              ? new Date(message.createdAt).toLocaleTimeString(
+                                  [],
+                                  {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  }
+                                )
+                              : ""}
+                          </div>
                         </div>
                       </div>
+                    ))
+                  ) : (
+                    <div className="flex items-center justify-center h-full min-h-[200px] text-gray-500">
+                      <p>No messages yet. Start the conversation 👋</p>
                     </div>
-                  ))
-                ) : (
-                  <div className="flex items-center justify-center h-full text-gray-500">
-                    <p>No messages yet. Start the conversation 👋</p>
-                  </div>
-                )}
-                <div ref={messagesEndRef} />
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
               </div>
             </div>
 
             {/* input field  */}
-            <div className="p-4 border-t border-gray-200 bg-white">
+            <div className="shrink-0 p-4 border-t border-gray-200 bg-white">
               <div className="flex items-end space-x-3">
                 <button className="text-gray-600 hover:text-gray-800 p-2 cursor-pointer">
                   <svg
@@ -847,14 +900,14 @@ export default function WhisperChatApp() {
                     onKeyDown={handleKeyPress}
                     placeholder="Type your message..."
                     className="w-full bg-transparent p-4 rounded-2xl focus:outline-none resize-none overflow-y-auto
-                                [&::-webkit-scrollbar]:w-2
-                                [&::-webkit-scrollbar-track]:bg-transparent
-                                [&::-webkit-scrollbar-thumb]:bg-transparent
-                                [&::-webkit-scrollbar-thumb]:hover:bg-transparent
-                                [&::-webkit-scrollbar]:hover:bg-transparent
-                                [&::-webkit-scrollbar]:active:bg-transparent
-                                scrollbar-width: none; /* Firefox */
-                                -ms-overflow-style: none; /* IE and Edge */"
+                          [&::-webkit-scrollbar]:w-2
+                          [&::-webkit-scrollbar-track]:bg-transparent
+                          [&::-webkit-scrollbar-thumb]:bg-transparent
+                          [&::-webkit-scrollbar-thumb]:hover:bg-transparent
+                          [&::-webkit-scrollbar]:hover:bg-transparent
+                          [&::-webkit-scrollbar]:active:bg-transparent
+                          scrollbar-width: none;
+                          -ms-overflow-style: none;"
                     rows="1"
                     style={{
                       minHeight: "44px",

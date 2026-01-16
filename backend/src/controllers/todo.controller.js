@@ -53,7 +53,7 @@ const getOneTodo = asyncHandler(async (req, res) => {
     throw new ApiErrorHandle(400, "Failed to get request!");
   }
   const todo = await Todo.findOne({ _id: id });
-  console.log(todo);
+
   if (!todo) {
     throw new ApiErrorHandle(500, "Failed to fetch todo due to server error.");
   }
@@ -70,7 +70,7 @@ const editTodo = asyncHandler(async (req, res) => {
   const isExisted = old_todo.some((item) => {
     return item.todo == editTodo;
   });
-  console.log(isExisted);
+ 
   if (isExisted) {
     throw new ApiErrorHandle(400, "Todo already existed!");
   }

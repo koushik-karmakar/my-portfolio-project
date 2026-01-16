@@ -420,7 +420,7 @@ const WeatherApp = () => {
           return;
         }
 
-        console.log("Weather API response:", response.data);
+        // console.log("Weather API response:", response.data);
 
         // Store raw API data
         setApiWeatherData(response.data);

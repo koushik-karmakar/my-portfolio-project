@@ -22,7 +22,12 @@ import {
 const router = Router();
 import { upload } from "../middlewares/multer.middleware.js";
 import { verifyJWT } from "../middlewares/auth.middlewares.js";
-import { getConnectedUser, getMessages } from "../controllers/chat.controller.js";
+import {
+  getConnectedUser,
+  getMessages,
+  createOrGetChatId,
+  getChatDetails,
+} from "../controllers/chat.controller.js";
 
 router.route("/register").post(
   upload.fields([
@@ -48,10 +53,11 @@ router.route("/send-mail-otp").post(verifyJWT, send_mail_otp);
 router.route("/verify-mail-otp").post(verifyJWT, verify_mail_otp);
 router.route("/update-user/details").patch(verifyJWT, updateUserDetails);
 
-// ===================== CHAT ROUTES =====================
 router.route("/search").get(verifyJWT, searchNewUser);
 router.route("/get-connected-user").get(verifyJWT, getConnectedUser);
 router.route("/get-messages").get(verifyJWT, getMessages);
+router.route("/create-or-get").post(verifyJWT, createOrGetChatId);
+router.route("/get-chat-details").get(verifyJWT, getChatDetails);
 router
   .route("/update-user/avatar")
   .patch(verifyJWT, upload.single("avatar"), updateAvater);

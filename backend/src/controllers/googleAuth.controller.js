@@ -30,7 +30,7 @@ export const googleLogin = asyncHandler(async (req, res) => {
   if (!payload) {
     throw new ApiErrorHandle(401, "Invalid Google token");
   }
-  console.log(payload);
+  // console.log(payload);
   if (!payload.email_verified) {
     throw new ApiErrorHandle(401, "Google email not verified");
   }

@@ -45,7 +45,7 @@ export function socketConnect(server, fr_url) {
     // ================= SEND MESSAGE =================
     socket.on("send_message", async (data) => {
       try {
-        const { senderId, receiverId, text } = data;
+        const { senderId, receiverId, text, chatId } = data;
         console.log("SEND_MESSAGE:", data);
         if (
           !mongoose.Types.ObjectId.isValid(senderId) ||
@@ -67,7 +67,7 @@ export function socketConnect(server, fr_url) {
             members: [senderId, receiverId],
           });
         }
-        const chatId = chat._id.toString();
+
         socket.join(chatId);
         const message = await Message.create({
           chatId,
@@ -86,9 +86,7 @@ export function socketConnect(server, fr_url) {
         const payload = await Message.findById(message._id);
 
         console.log("payload", payload.toObject());
-        io.to(chatId).emit("receive_message", {
-          ...payload.toObject(),
-        });
+        io.to(chatId).emit("receive_message", payload.toObject());
       } catch (err) {
         console.error("send_message error:", err);
         socket.emit("message_error", {
@@ -129,9 +127,9 @@ export function socketConnect(server, fr_url) {
 
     socket.on("disconnect", async () => {
       const userId = socketToUser.get(socket.id);
-      console.log(userId);
+      // console.log(userId);
       const del = socketToUser.delete(socket.id);
-      console.log("second TimeRanges", socketToUser, del);
+      // console.log("second TimeRanges", socketToUser, del);
       if (del) {
         const lastSeen = new Date();
         await User.findByIdAndUpdate(userId, {
